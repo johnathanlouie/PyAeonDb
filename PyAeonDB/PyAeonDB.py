@@ -138,6 +138,16 @@ def removeSymbols(s:str) -> str:
     s = s.replace(".", " ")
     s = s.replace("/", " ")
     s = s.replace("?", " ")
+    s = s.replace("1", " ")
+    s = s.replace("2", " ")
+    s = s.replace("3", " ")
+    s = s.replace("4", " ")
+    s = s.replace("5", " ")
+    s = s.replace("6", " ")
+    s = s.replace("7", " ")
+    s = s.replace("8", " ")
+    s = s.replace("9", " ")
+    s = s.replace("0", " ")
     return s
 
 def indexTable(tableObj:List[str]) -> Dict[str, List[int]]:
@@ -161,11 +171,15 @@ def indexTable(tableObj:List[str]) -> Dict[str, List[int]]:
 def buildFuzzy(indexObj:Dict[str, List[int]]) -> Dict[str, List[str]]:
     fuzzy = dict()
     map = mapNgrams(indexObj)
-    for token1 in indexObj.keys():
+    terms = list(indexObj.keys())
+    i = 1
+    for token1 in terms:
         related = set()
-        for token2 in indexObj.keys():
+        for token2 in terms:
+            print("Progress: " + str(i) + " of " + str(len(terms)**2))
             if dicesCoefficient(token1, token2, map) > 0.7:
                 related.add(token2)
+            i += 1
         fuzzy.update({token1: list(related)})
     return fuzzy
 
