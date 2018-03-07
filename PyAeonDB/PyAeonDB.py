@@ -84,7 +84,11 @@ def mapNgrams(index: Index) -> Dict[str, Set[str]]:
 
 def dicesCoefficient(str1: str, str2: str, map: Dict[str, Set[str]]) -> float:
     a = map.get(str1)
+    if a == None:
+        a = bigrams(str1)
     b = map.get(str2)
+    if b == None:
+        b = bigrams(str2)
     c = a.intersection(b)
     sim = float(2 * len(c)) / float(len(a) + len(b))
     print("===============================================================")
@@ -162,14 +166,25 @@ def createFuzzy(index: Index) -> Fuzzy:
     map = mapNgrams(index)
     terms = list(index.keys())
     i = 1
-    for token1 in terms:
-        related = set()
-        for token2 in terms:
-            print("Progress: " + str(i) + " of " + str(len(terms)**2))
-            if dicesCoefficient(token1, token2, map) > 0.7:
-                related.add(token2)
+    total = 0
+    counter = len(terms)
+    while counter > 1:
+        total += counter - 1
+        counter -= 1
+    for term in terms:
+        fuzzy.update({term : list()})
+    for x in range(len(terms)):
+        token1 = terms[x]
+        related1 = fuzzy.get(token1)
+        related1.append(token1)
+        for y in range(x + 1, len(terms)):
+            token2 = terms[y]
+            print("Progress: " + str(i) + " of " + str(total))
+            if dicesCoefficient(token1, token2, map) > 0.6:
+                related2 = fuzzy.get(token2)
+                related1.append(token2)
+                related2.append(token1)
             i += 1
-        fuzzy.update({token1: list(related)})
     return fuzzy
 
 def importCsv(filename: str) -> Table:
@@ -297,7 +312,7 @@ def main() -> None:
                     g_indices.update({args[1] : tableIndex})
                     try:
                         print("Saving index %s." % args[1])
-                        writeIndex(args[1], tableIndex);
+                        writeIndex(args[1], tableIndex)
                     except:
                         print("Failed to write index to file.")
                 else:
