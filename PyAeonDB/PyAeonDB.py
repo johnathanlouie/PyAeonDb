@@ -6,61 +6,51 @@ import json
 import time
 import datetime
 
-def readTable(tableName:str) -> List[str]:
-    filename = "C:/Arcology/AeonDB/%s/table.txt" % tableName
-    if not os.path.isfile(filename):
-        print("Table does not exist.")
-        return
-    return json.load(open(filename))
+Table = List[str]
+Index = Dict[str, List[int]]
+Fuzzy = Dict[str, List[str]]
 
-def writeTable(tableName:str, data:List[str]) -> None:
-    filename = "C:/Arcology/AeonDB/%s/table.txt" % tableName
-    dir = "C:/Arcology/AeonDB/%s/" % tableName
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    json.dump(data, open(filename, 'w+'))
-    return
+ROOT_PATH = "C:/Arcology/AeonDB"
+TABLE_DIR = "C:/Arcology/AeonDB/%s"
+TABLE_PATH = "C:/Arcology/AeonDB/%s/table.txt"
+INDEX_PATH = "C:/Arcology/AeonDB/%s/index.txt"
+FUZZY_PATH = "C:/Arcology/AeonDB/%s/fuzzy.txt"
 
-def readIndex(tableName:str) -> Dict[str, List[int]]:
-    filename = "C:/Arcology/AeonDB/%s/index.txt" % tableName
-    if not os.path.isfile(filename):
-        print("Index does not exist.")
-        return
-    return json.load(open(filename))
+def readTable(tableName: str) -> Table:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    return json.load(open(TABLE_PATH % tableName))
 
-def writeIndex(tableName:str, data:Dict[str, List[int]]) -> None:
-    filename = "C:/Arcology/AeonDB/%s/index.txt" % tableName
-    dir = "C:/Arcology/AeonDB/%s/" % tableName
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    json.dump(data, open(filename, 'w+'))
-    return
+def writeTable(tableName: str, table: Table) -> None:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    json.dump(table, open(TABLE_PATH % tableName, 'w+'))
+    return None
 
-def readFuzzy(tableName:str) -> Dict[str, List[str]]:
-    filename = "C:/Arcology/AeonDB/%s/fuzzy.txt" % tableName
-    if not os.path.isfile(filename):
-        print("Fuzzy dictionary does not exist.")
-        return
-    return json.load(open(filename))
+def readIndex(tableName: str) -> Index:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    return json.load(open(INDEX_PATH % tableName))
 
-def writeFuzzy(tableName:str, data:Dict[str, List[str]]) -> None:
-    filename = "C:/Arcology/AeonDB/%s/fuzzy.txt" % tableName
-    dir = "C:/Arcology/AeonDB/%s/" % tableName
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-    json.dump(data, open(filename, 'w+'))
-    return
+def writeIndex(tableName: str, index: Index) -> None:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    json.dump(index, open(INDEX_PATH % tableName, 'w+'))
+    return None
+
+def readFuzzy(tableName: str) -> Fuzzy:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    return json.load(open(FUZZY_PATH % tableName))
+
+def writeFuzzy(tableName: str, fuzzy: Fuzzy) -> None:
+    os.makedirs(TABLE_DIR % tableName, exist_ok=True)
+    json.dump(fuzzy, open(FUZZY_PATH % tableName, 'w+'))
+    return None
 
 def listTables() -> List[str]:
-    filename = "C:/Arcology/AeonDB/"
-    if not os.path.exists(filename):
-        os.makedirs(filename)
-    return os.listdir(filename)
+    os.makedirs(ROOT_PATH, exist_ok=True)
+    return os.listdir(ROOT_PATH)
 
 def timestamp() -> str:
     return datetime.datetime.fromtimestamp(time.time()).strftime("%m/%d/%Y %H:%M:%S")
 
-cmdHelpMap = {
+g_cmdHelpMap = {
     "buildfuzzy"  : "buildFuzzy {tableName}",
     "createtable" : "createTable {tableDesc}",
     "getrows"     : "getRows {tableName} {key} {count}",
@@ -73,27 +63,26 @@ cmdHelpMap = {
     }
 
 def printHelp() -> None:
-    for help in cmdHelpMap.values():
+    for help in g_cmdHelpMap.values():
         print(help)
     return
 
-def bigrams(s:str) -> Set[str]:
+def bigrams(s: str) -> Set[str]:
     ngrams = set()
     if len(s) < 2:
         ngrams.add(s)
         return ngrams
     for i in range(len(s) - 1):
-        sub = s[i:i+2]
-        ngrams.add(sub)
+        ngrams.add(s[i:i+2])
     return ngrams
 
-def mapNgrams(indexObj:Dict[str, List[int]]) -> Dict[str, Set[str]]:
+def mapNgrams(index: Index) -> Dict[str, Set[str]]:
     ngrams = dict()
-    for term in indexObj.keys():
+    for term in index.keys():
         ngrams.update({term : bigrams(term)})
     return ngrams
 
-def dicesCoefficient(str1:str, str2:str, map:Dict[str, Set[str]]) -> float:
+def dicesCoefficient(str1: str, str2: str, map: Dict[str, Set[str]]) -> float:
     a = map.get(str1)
     b = map.get(str2)
     c = a.intersection(b)
@@ -105,7 +94,7 @@ def dicesCoefficient(str1:str, str2:str, map:Dict[str, Set[str]]) -> float:
     print("sim: " + str(sim))
     return sim
 
-def removeSymbols(s:str) -> str:
+def preprocess(s: str) -> str:
     s = s.replace("~", " ")
     s = s.replace("`", " ")
     s = s.replace("!", " ")
@@ -150,11 +139,11 @@ def removeSymbols(s:str) -> str:
     s = s.replace("0", " ")
     return s
 
-def indexTable(tableObj:List[str]) -> Dict[str, List[int]]:
+def createIndex(table: Table) -> Index:
     index = dict()
-    for rowId in range(len(tableObj)):
-        row = tableObj[rowId]
-        row = removeSymbols(row).lower()
+    for rowId in range(len(table)):
+        row = table[rowId]
+        row = preprocess(row).lower()
         tokens = set(row.split())
         if "" in tokens:
             tokens.remove("")
@@ -168,10 +157,10 @@ def indexTable(tableObj:List[str]) -> Dict[str, List[int]]:
         print("Indexed row %d." % rowId)
     return index
 
-def buildFuzzy(indexObj:Dict[str, List[int]]) -> Dict[str, List[str]]:
+def createFuzzy(index: Index) -> Fuzzy:
     fuzzy = dict()
-    map = mapNgrams(indexObj)
-    terms = list(indexObj.keys())
+    map = mapNgrams(index)
+    terms = list(index.keys())
     i = 1
     for token1 in terms:
         related = set()
@@ -183,155 +172,178 @@ def buildFuzzy(indexObj:Dict[str, List[int]]) -> Dict[str, List[str]]:
         fuzzy.update({token1: list(related)})
     return fuzzy
 
-def importCsv(filename:str) -> List[str]:
-    if not os.path.exists(filename):
-        print("CSV does not exist.")
-        return
-    a = list()
-    with open(filename) as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            print(row)
-            a.append(row[0])
-    return a
+def importCsv(filename: str) -> Table:
+    return [row[0] for row in csv.reader(open(filename))]
 
-def expandQuery(query:List[str], fuzzyObj:Dict[str, List[str]]) -> List[str]:
+def expandQuery(query: Set[str], fuzzy: Fuzzy) -> Set[str]:
     expandedQuery = set()
     for word in query:
-        related = fuzzyObj.get(word)
-        expandedQuery = expandedQuery.union(related)
-    return List(expandedQuery)
+        related = fuzzy.get(word)
+        if related != None:
+            expandedQuery.update(related)
+    return expandedQuery
 
-def find(tableObj:List[str], indexObj:Dict[str, List[int]], keyTerms:List[str]) -> List[str]:
+def find(table: Table, index: Index, keyTerms: Set[str]) -> Table:
     rowIds = set()
     results = list()
+    first = True
     for word in keyTerms:
-        rowIds = rowIds.union(indexObj.get(word))
+        termRowIds = index.get(word)
+        if termRowIds == None and first:
+            rowIds = set()
+            first = False
+        elif termRowIds != None and first:
+            rowIds = set(termRowIds)
+            first = False
+        elif termRowIds != None:
+            rowIds.intersection_update(termRowIds)
     for i in rowIds:
-        results.append(tableObj[i])
+        results.append(table[i])
     return results
 
-
-tableDb = defaultdict(list)
-indices = dict()
-fuzzyDict = dict()
+g_tables = defaultdict(list)
+g_indices = dict()
+g_fuzzyDict = dict()
 
 def loadAllTables() -> None:
     tableNames = listTables()
     for tableName in tableNames:
         print("%s Log.info: Table %s: Backup volume offline. Waiting for new volume." % (timestamp(), tableName))
 
-        tableObj = readTable(tableName)
-        if tableObj != None:
-            tableDb.update({tableName: tableObj})
-            print("%s Log.info: Table %s: Recovered %d rows." % (timestamp(), tableName, len(tableObj)))
+        try:
+            table = readTable(tableName)
+            g_tables.update({tableName : table})
+            print("%s Log.info: Table %s: Recovered %d rows." % (timestamp(), tableName, len(table)))
+        except OSError:
+            print("%s Log.info: Table %s: Could not read file." % (timestamp(), tableName))
+        except json.JSONDecodeError:
+            print("%s Log.info: Table %s: File is corrupted." % (timestamp(), tableName))
 
-        indexObj = readIndex(tableName)
-        if indexObj != None:
-            indices.update({tableName: indexObj})
+        try:
+            index = readIndex(tableName)
+            g_indices.update({tableName : index})
+            print("%s Log.info: Index %s: Recovered %d terms." % (timestamp(), tableName, len(index)))
+        except OSError:
+            print("%s Log.info: Index %s: Could not read file." % (timestamp(), tableName))
+        except json.JSONDecodeError:
+            print("%s Log.info: Index %s: File is corrupted." % (timestamp(), tableName))
 
-        fuzzyObj = readFuzzy(tableName)
-        if fuzzyObj != None:
-            fuzzyDict.update({tableName: fuzzyObj})
+        try:
+            fuzzy = readFuzzy(tableName)
+            g_fuzzyDict.update({tableName: fuzzy})
+            print("%s Log.info: Fuzzy Dictionary %s: Recovered %d terms." % (timestamp(), tableName, len(fuzzy)))
+        except OSError:
+            print("%s Log.info: Fuzzy Dictionary %s: Could not read file." % (timestamp(), tableName))
+        except json.JSONDecodeError:
+            print("%s Log.info: Fuzzy Dictionary %s: File is corrupted." % (timestamp(), tableName))
 
     print("AeonDB ready. %d tables available." % len(tableNames))
-    return
+    return None
 
-def main():
+def prompt() -> List[str]:
+    args = input(" : ").split()
+    args[0] = args[0].lower()
+    return args
+
+def main() -> None:
     print("%s AeonDB 1.0 beta 65" % timestamp())
     print("%s Copyright © 2011-2018 by Kronosaur Productions LLC. All Rights Reserved." % timestamp())
     loadAllTables()
-    args = input(" : ").split()
-    args[0] = args[0].lower()
+    args = prompt()
     while args[0] != "quit":
+        # createtable
         if args[0] == "createtable":
             if len(args) < 2:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
                 print("Not implemented for demo.")
+        # getrows
         elif args[0] == "getrows":
             if len(args) < 4:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
                 print("Not implemented for demo.")
+        # importtable
         elif args[0] == "importtable":
             if len(args) < 3:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
                 csvName = args[2]
                 csvName = csvName.replace('"', "")
                 csvName = csvName.replace("'", "")
                 csvName = csvName.replace("/", "\\")
-                tableObj = importCsv(csvName)
-                if tableObj != None:
+                try:
+                    tableObj = importCsv(csvName)
                     print("Imported %d rows to table %s." % (len(tableObj), args[1]))
-                    tableDb.update({args[1]: tableObj})
+                    g_tables.update({args[1] : tableObj})
                     writeTable(args[1], tableObj)
+                except:
+                    print("Failed to import table. Check URI.")
+        # listtables
         elif args[0] == "listtables":
             if len(args) < 1:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
                 for x in listTables():
                     print(x)
+        # indextable
         elif args[0] == "indextable":
             if len(args) < 2:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
-                if args[1] in tableDb:
-                    tableIndex = indexTable(tableDb.get(args[1]))
-                    indices.update({args[1]: tableIndex})
+                if args[1] in g_tables:
+                    tableIndex = createIndex(g_tables.get(args[1]))
+                    g_indices.update({args[1] : tableIndex})
                     writeIndex(args[1], tableIndex);
                 else:
                     print("Table %s does not exist." % args[1])
+        # find
         elif args[0] == "find":
             if len(args) < 3:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
-                if args[1] not in tableDb:
+                if args[1] not in g_tables:
                     print("Table %s does not exist." % args[1])
+                elif args[1] not in g_indices:
+                    print("Index %s does not exist." % args[1])
                 else:
-                    tableObj = tableDb.get(args[1])
-                    indexObj = indices.get(args[1])
-                    if indexObj == None:
-                        print("Build index for table %s first." % args[1])
-                        continue
-                    results = find(tableObj, indexObj, args[2:])
+                    results = find(g_tables.get(args[1]), g_indices.get(args[1]), set(args[2:]))
                     for row in results:
                         print(row)
+                    print("Found %d rows." % len(results))
+        # fuzzysearch
         elif args[0] == "fuzzysearch":
             if len(args) < 3:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
-                if args[1] not in tableDb:
+                if args[1] not in g_tables:
                     print("Table %s does not exist." % args[1])
+                elif args[1] not in g_indices:
+                    print("Index %s does not exist." % args[1])
+                elif args[1] not in g_fuzzyDict:
+                    print("Fuzzy Dictionary %s does not exist." % args[1])
                 else:
-                    tableObj = tableDb.get(args[1])
-                    indexObj = indices.get(args[1])
-                    if indexObj == None:
-                        print("Build index for table %s first." % args[1])
-                        continue
-                    fuzzyObj = fuzzyDict.get(args[1])
-                    if fuzzyObj == None:
-                        print("Build fuzzy dictionary for table %s first." % args[1])
-                        continue
-                    something = expandQuery(args[2:], fuzzyObj)
-                    results = find(tableObj, indexObj, something)
+                    expanded = expandQuery(set(args[2:]), g_fuzzyDict.get(args[1]))
+                    results = find(g_tables.get(args[1]), g_indices.get(args[1]), expanded)
                     for row in results:
                         print(row)
+                    print("Found %d rows." % len(results))
+        # buildfuzzy
         elif args[0] == "buildfuzzy":
             if len(args) < 2:
-                print(cmdHelpMap.get(args[0]))
+                print(g_cmdHelpMap.get(args[0]))
             else:
-                if args[1] not in tableDb:
-                    print("Table %s does not exist." % args[1])
+                if args[1] not in g_indices:
+                    print("Index %s does not exist." % args[1])
                 else:
-                    tableFuzzy = buildFuzzy(indices.get(args[1]))
-                    fuzzyDict.update({args[1]: tableFuzzy})
-                    writeFuzzy(args[1], tableFuzzy);
+                    tableFuzzy = createFuzzy(g_indices.get(args[1]))
+                    g_fuzzyDict.update({args[1] : tableFuzzy})
+                    writeFuzzy(args[1], tableFuzzy)
+        # Bad commands
         else:
             printHelp()
-        args = input(" : ").split()
-        args[0] = args[0].lower()
-    return
+        # Next loop
+        args = prompt()
+    return None
 
 main()
