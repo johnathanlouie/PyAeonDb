@@ -188,7 +188,8 @@ def createFuzzy(index: Index) -> Fuzzy:
     return fuzzy
 
 def importCsv(filename: str) -> Table:
-    return [row[0] for row in csv.reader(open(filename))]
+    table = [" ".join(row) for row in csv.reader(open(filename))].pop(0)
+    return table
 
 def expandQuery(query: Set[str], fuzzy: Fuzzy) -> Set[str]:
     expandedQuery = set()
@@ -292,6 +293,7 @@ def main() -> None:
                     tableObj = importCsv(csvName)
                     print("Imported %d rows to table %s." % (len(tableObj), args[1]))
                     g_tables.update({args[1] : tableObj})
+                    print("Saving table %s to file." % args[1])
                     writeTable(args[1], tableObj)
                 except:
                     print("Failed to import table. Check URI.")
