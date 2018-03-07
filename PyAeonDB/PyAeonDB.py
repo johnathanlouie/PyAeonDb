@@ -143,6 +143,9 @@ def preprocess(s: str) -> str:
     s = s.replace("0", " ")
     return s
 
+def liveFuzzy():
+    return
+
 def createIndex(table: Table) -> Index:
     index = dict()
     for rowId in range(len(table)):
@@ -188,7 +191,8 @@ def createFuzzy(index: Index) -> Fuzzy:
     return fuzzy
 
 def importCsv(filename: str) -> Table:
-    table = [" ".join(row) for row in csv.reader(open(filename))].pop(0)
+    table = [" ".join(row) for row in csv.reader(open(filename))]
+    table.pop(0)
     return table
 
 def expandQuery(query: Set[str], fuzzy: Fuzzy) -> Set[str]:
