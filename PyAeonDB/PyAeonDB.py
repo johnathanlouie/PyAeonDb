@@ -154,7 +154,7 @@ def createIndex(table: Table) -> Index:
             rowIds = set(rowIds)
             rowIds.add(rowId)
             index.update({token: list(rowIds)})
-        print("Indexed row %d." % rowId)
+        print("Indexed row %d of %d." % (rowId, len(table)))
     return index
 
 def createFuzzy(index: Index) -> Fuzzy:
@@ -188,6 +188,7 @@ def find(table: Table, index: Index, keyTerms: Set[str]) -> Table:
     results = list()
     first = True
     for word in keyTerms:
+        word = word.lower()
         termRowIds = index.get(word)
         if termRowIds == None and first:
             rowIds = set()
@@ -294,7 +295,11 @@ def main() -> None:
                 if args[1] in g_tables:
                     tableIndex = createIndex(g_tables.get(args[1]))
                     g_indices.update({args[1] : tableIndex})
-                    writeIndex(args[1], tableIndex);
+                    try:
+                        print("Saving index %s." % args[1])
+                        writeIndex(args[1], tableIndex);
+                    except:
+                        print("Failed to write index to file.")
                 else:
                     print("Table %s does not exist." % args[1])
         # find
@@ -338,7 +343,11 @@ def main() -> None:
                 else:
                     tableFuzzy = createFuzzy(g_indices.get(args[1]))
                     g_fuzzyDict.update({args[1] : tableFuzzy})
-                    writeFuzzy(args[1], tableFuzzy)
+                    try:
+                        print("Saving fuzzy dictionary %s." % args[1])
+                        writeFuzzy(args[1], tableFuzzy)
+                    except:
+                        print("Failed to write fuzzy dictionary to file.")
         # Bad commands
         else:
             printHelp()
