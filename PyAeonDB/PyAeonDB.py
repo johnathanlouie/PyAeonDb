@@ -455,7 +455,7 @@ def main() -> None:
                     print("Table %s does not exist." % args[1])
                 elif args[1] not in g_indices:
                     print("Index %s does not exist." % args[1])
-                elif args[1] not in g_fuzzyDict:
+                elif args[1] not in g_fuzzyDict2:
                     print("Fuzzy Dictionary %s does not exist." % args[1])
                 else:
                     table = g_tables.get(args[1])
