@@ -474,7 +474,7 @@ def main() -> None:
                     print("Index %s does not exist." % args[1])
                 else:
                     tableFuzzy = buildFuzzy(g_indices.get(args[1]))
-                    fuzzyDict2.update({args[1] : tableFuzzy})
+                    g_fuzzyDict2.update({args[1] : tableFuzzy})
                     try:
                         print("Saving fuzzy dictionary %s." % args[1])
                         writeFuzzy2(args[1], tableFuzzy)
