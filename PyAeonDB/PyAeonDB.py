@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import List, Set, Dict, Tuple
 import csv
 import os
@@ -16,6 +15,11 @@ TABLE_PATH = "C:/Arcology/AeonDB/%s/table.txt"
 INDEX_PATH = "C:/Arcology/AeonDB/%s/index.txt"
 FUZZY_PATH = "C:/Arcology/AeonDB/%s/fuzzy.txt"
 FUZZY2_PATH = "C:/Arcology/AeonDB/%s/fuzzy2.txt"
+
+g_tables: Dict[str, Table] = dict()
+g_indices: Dict[str, Index] = dict()
+g_fuzzyDict: Dict[str, Fuzzy] = dict()
+g_fuzzyDict2: Dict[str, Fuzzy] = dict()
 
 def readTable(tableName: str) -> Table:
     os.makedirs(TABLE_DIR % tableName, exist_ok=True)
@@ -61,8 +65,6 @@ def timestamp() -> str:
     return datetime.datetime.fromtimestamp(time.time()).strftime("%m/%d/%Y %H:%M:%S")
 
 g_cmdHelpMap = {
-    "buildfuzzy"  : "buildFuzzy {tableName}",
-    "createfuzzy" : "createFuzzy {tableName}",
     "createtable" : "createTable {tableDesc}",
     "getrows"     : "getRows {tableName} {key} {count}",
     "importtable" : "importTable {tableName} {CSV filespec}",
@@ -70,7 +72,6 @@ g_cmdHelpMap = {
     "indextable"  : "indexTable {tableName}",
     "find"        : "find {tableName} {term1 term2 term3...}",
     "fuzzysearch" : "fuzzySearch {tableName} {term1 term2 term3...}",
-    "fuzzyfind"   : "fuzzyFind {tableName} {term1 term2 term3...} {number_of_results_to_return}",
     "quit"        : "quit"
     }
 
@@ -79,7 +80,7 @@ def printHelp() -> None:
         print(help)
     return
 
-def bigrams(s: str) -> Set[str]:
+def toBigrams(s: str) -> Set[str]:
     ngrams = set()
     if len(s) < 2:
         ngrams.add(s)
@@ -88,27 +89,8 @@ def bigrams(s: str) -> Set[str]:
         ngrams.add(s[i:i+2])
     return ngrams
 
-def mapNgrams(index: Index) -> Dict[str, Set[str]]:
-    ngrams = dict()
-    for term in index.keys():
-        ngrams.update({term : bigrams(term)})
-    return ngrams
-
-def dicesCoefficient(str1: str, str2: str, map: Dict[str, Set[str]]) -> float:
-    a = map.get(str1)
-    if a == None:
-        a = bigrams(str1)
-    b = map.get(str2)
-    if b == None:
-        b = bigrams(str2)
-    c = a.intersection(b)
-    sim = float(2 * len(c)) / float(len(a) + len(b))
-    print("===============================================================")
-    print(str1 + " " + str(a))
-    print(str2 + " " + str(b))
-    print("shared: " + str(c))
-    print("sim: " + str(sim))
-    return sim
+def dicesCoefficient(a: Set[str], b: Set[str]) -> float:
+    return float(2 * len(a.intersection(b))) / float(len(a) + len(b))
 
 def preprocess(s: str) -> str:
     s = s.replace("~", " ")
@@ -155,144 +137,90 @@ def preprocess(s: str) -> str:
     s = s.replace("0", " ")
     return s
 
-def createIndex(table: Table) -> Index:
-    index = dict()
+def createIndex(table: Table) -> Tuple[Index, Fuzzy, Fuzzy]:
+    startTime = time.time()
+    index: Index = dict()
+    fuzzy1: Fuzzy = dict()
+    fuzzy2: Fuzzy = dict()
+    fuzzy3: Dict[str, Set[str]] = dict()
     for rowId in range(len(table)):
         row = table[rowId]
         row = preprocess(row).lower()
-        tokens = set(row.split())
-        if "" in tokens:
-            tokens.remove("")
-        for token in tokens:
-            rowIds = index.get(token)
-            if rowIds == None:
-                rowIds = set()
-            rowIds = set(rowIds)
-            rowIds.add(rowId)
-            index.update({token: list(rowIds)})
+        terms = set(row.split())
+        if "" in terms:
+            terms.remove("")
+        for term in terms:
+            if term not in index:
+                index.update({term: list()})
+            rowIds = index.get(term)
+            if rowId not in rowIds:
+                rowIds.append(rowId)
+            if term not in fuzzy3:
+                atLeastOneBigram = set()
+                bigrams = toBigrams(term)
+                fuzzy3.update({term: bigrams})
+                for bigram in bigrams:
+                    if bigram not in fuzzy2:
+                        fuzzy2.update({bigram: list()})
+                    bigramList = fuzzy2.get(bigram)
+                    bigramList.append(term)
+                    atLeastOneBigram.update(bigramList)
+                related = list()
+                for term2 in atLeastOneBigram:
+                    if term == term2:
+                        related.append(term2)
+                    elif dicesCoefficient(fuzzy3.get(term), fuzzy3.get(term2)) > 0.6:
+                        related.append(term2)
+                        fuzzy1.get(term2).append(term)
+                fuzzy1.update({term: related})
         print("Indexed row %d of %d." % (rowId, len(table)))
-    return index
-
-#def buildFuzzy(index: Index) -> Fuzzy:
-#    termBigrams = mapNgrams(index)
-#    uniqueBigrams = set()
-#    for termBigram in termBigrams.values():
-#        uniqueBigrams.update(termBigram)
-#    fuzzy = dict()
-#    for bigram in uniqueBigrams:
-#        fuzzy.update({bigram : list()})
-#    for term, bigramSet in termBigrams.items():
-#        for b in bigramSet:
-#            fuzzy.get(b).append(term)
-#    return fuzzy
-
-def buildFuzzy(indexObj:Dict[str, List[int]]) -> Dict[str, List[str]]:
-    fuzzy = dict()
-    for key, value in indexObj.items():
-        #This is a dictionary so indexing n-grams on value is wasteful - LOTS OF STRINGS -- going to do it anyways
-        ngrams = bigrams(key)
-        for ngram in ngrams:
-            ngram_tokens = fuzzy.get(ngram)
-            if ngram_tokens == None:
-                ngram_tokens = set()
-            ngram_tokens = set(ngram_tokens)
-            for index_ngram_relation_value in value:
-                ngram_tokens.add(index_ngram_relation_value)
-            fuzzy.update({ngram: list(ngram_tokens)})
-        print("Created fuzzy mapping for %s" % key)
-    return fuzzy
-
-def fuzzyFind(tableObj:List[str], indexObj:Dict[str, List[int]], fuzzyObj:Dict[str, List[int]], keyTerms:List[str],nClosestMatches:int=20) -> List[str]:
-    rowIds = set()
-    results = list()
-    ngrams_list = list()
-    for word in keyTerms:
-        ngrams = bigrams(word)
-        for ngram in ngrams:
-            ngrams_list.append(ngram)
-    votes_dict = dict()
-    for ngram in ngrams_list:
-        ngramRowMatches = fuzzyObj[ngram]
-        if ngramRowMatches == None:
-            continue
-        for ngramRowMatch in ngramRowMatches:
-            current_votes = votes_dict.get(ngramRowMatch)
-            if current_votes == None:
-                current_votes = 0
-            current_votes = int(current_votes)
-            current_votes +=1
-            votes_dict[ngramRowMatch] = current_votes
-    sorted_votes = sorted(votes_dict.items(),key=lambda x:x[1],reverse=True)
-    resultsAdded = 0
-    for highest_voted_result in sorted_votes:
-        results.append(tableObj[highest_voted_result[0]])
-        resultsAdded += 1
-        if resultsAdded >= nClosestMatches:
-            break
-    return results
-
-def createFuzzy(index: Index) -> Fuzzy:
-    fuzzy = dict()
-    map = mapNgrams(index)
-    terms = list(index.keys())
-    i = 1
-    total = 0
-    counter = len(terms)
-    while counter > 1:
-        total += counter - 1
-        counter -= 1
-    for term in terms:
-        fuzzy.update({term : list()})
-    for x in range(len(terms)):
-        token1 = terms[x]
-        related1 = fuzzy.get(token1)
-        related1.append(token1)
-        for y in range(x + 1, len(terms)):
-            token2 = terms[y]
-            print("Progress: " + str(i) + " of " + str(total))
-            if dicesCoefficient(token1, token2, map) > 0.6:
-                related2 = fuzzy.get(token2)
-                related1.append(token2)
-                related2.append(token1)
-            i += 1
-    return fuzzy
+    print("Indexing Time: " + str(time.time() - startTime))
+    return index, fuzzy1, fuzzy2
 
 def importCsv(filename: str) -> Table:
     table = [" ".join(row) for row in csv.reader(open(filename))]
     table.pop(0)
     return table
 
-def expandQuery(query: Set[str], fuzzy: Fuzzy) -> Set[str]:
-    expandedQuery = set()
-    for word in query:
-        related = fuzzy.get(word)
-        if related != None:
-            expandedQuery.update(related)
-    return expandedQuery
+def expandQuery(term: str, index: Index, fuzzy: Fuzzy, fuzzy2: Fuzzy) -> Set[int]:
+    rowIds = set()
+    relateds = set()
+    if term not in fuzzy:
+        possiblyRelateds = set()
+        bigrams = toBigrams(term)
+        for bigram in bigrams:
+            if bigram in fuzzy2:
+                possiblyRelateds.update(fuzzy2.get(bigram))
+        for pRelated in possiblyRelateds:
+            if dicesCoefficient(toBigrams(pRelated), bigrams) > 0.6:
+                relateds.add(pRelated)
+    else:
+        relateds = fuzzy.get(term)
+    for related in relateds:
+        rowIds.update(index.get(related))
+    return rowIds
 
-def find(table: Table, index: Index, keyTerms: Set[str]) -> Table:
+def find(keyTerms: Set[str], table: Table, index: Index, fuzzy: Fuzzy, fuzzy2: Fuzzy, isFuzzy: bool) -> Table:
+    lowKeyTerms = {term.lower() for term in keyTerms}
     rowIds = set()
     results = list()
-    first = True
-    for word in keyTerms:
-        word = word.lower()
-        termRowIds = index.get(word)
-        if termRowIds == None and first:
-            rowIds = set()
-            first = False
-        elif termRowIds != None and first:
-            rowIds = set(termRowIds)
-            first = False
-        elif termRowIds != None:
-            rowIds.intersection_update(termRowIds)
+    first = lowKeyTerms.pop()
+    if isFuzzy:
+        rowIds.update(expandQuery(first, index, fuzzy, fuzzy2))
+    elif first in index:
+        rowIds.update(index.get(first))
+    else:
+        return results
+    for word in lowKeyTerms:
+        if isFuzzy:
+            rowIds.intersection_update(expandQuery(word, index, fuzzy, fuzzy2))
+        elif word in index:
+            rowIds.intersection_update(index.get(word))
+        else:
+            return results
     for i in rowIds:
         results.append(table[i])
     return results
-
-g_tables = defaultdict(list)
-g_indices = dict()
-g_fuzzyDict = dict()
-g_fuzzyDict2 = dict()
 
 def loadAllTables() -> None:
     tableNames = listTables()
@@ -301,7 +229,7 @@ def loadAllTables() -> None:
 
         try:
             table = readTable(tableName)
-            g_tables.update({tableName : table})
+            g_tables.update({tableName: table})
             print("%s Log.info: Table %s: Recovered %d rows." % (timestamp(), tableName, len(table)))
         except OSError:
             print("%s Log.info: Table %s: Could not read file." % (timestamp(), tableName))
@@ -310,7 +238,7 @@ def loadAllTables() -> None:
 
         try:
             index = readIndex(tableName)
-            g_indices.update({tableName : index})
+            g_indices.update({tableName: index})
             print("%s Log.info: Index %s: Recovered %d terms." % (timestamp(), tableName, len(index)))
         except OSError:
             print("%s Log.info: Index %s: Could not read file." % (timestamp(), tableName))
@@ -391,11 +319,17 @@ def main() -> None:
                 print(g_cmdHelpMap.get(args[0]))
             else:
                 if args[1] in g_tables:
-                    tableIndex = createIndex(g_tables.get(args[1]))
+                    tableIndex, tableFuzzy1, tableFuzzy2 = createIndex(g_tables.get(args[1]))
                     g_indices.update({args[1] : tableIndex})
+                    g_fuzzyDict.update({args[1] : tableFuzzy1})
+                    g_fuzzyDict2.update({args[1] : tableFuzzy2})
                     try:
                         print("Saving index %s." % args[1])
                         writeIndex(args[1], tableIndex)
+                        print("Saving fuzzy %s." % args[1])
+                        writeFuzzy(args[1], tableFuzzy1)
+                        print("Saving fuzzy2 %s." % args[1])
+                        writeFuzzy2(args[1], tableFuzzy2)
                     except:
                         print("Failed to write index to file.")
                 else:
@@ -409,8 +343,12 @@ def main() -> None:
                     print("Table %s does not exist." % args[1])
                 elif args[1] not in g_indices:
                     print("Index %s does not exist." % args[1])
+                elif args[1] not in g_fuzzyDict:
+                    print("Fuzzy1 %s does not exist." % args[1])
+                elif args[1] not in g_fuzzyDict2:
+                    print("Fuzzy2 %s does not exist." % args[1])
                 else:
-                    results = find(g_tables.get(args[1]), g_indices.get(args[1]), set(args[2:]))
+                    results = find(set(args[2:]), g_tables.get(args[1]), g_indices.get(args[1]), g_fuzzyDict.get(args[1]), g_fuzzyDict2.get(args[1]), False)
                     for row in results:
                         print(row)
                     print("Found %d rows." % len(results))
@@ -424,62 +362,14 @@ def main() -> None:
                 elif args[1] not in g_indices:
                     print("Index %s does not exist." % args[1])
                 elif args[1] not in g_fuzzyDict:
-                    print("Fuzzy Dictionary %s does not exist." % args[1])
-                else:
-                    expanded = expandQuery(set(args[2:]), g_fuzzyDict.get(args[1]))
-                    results = find(g_tables.get(args[1]), g_indices.get(args[1]), expanded)
-                    for row in results:
-                        print(row)
-                    print("Found %d rows." % len(results))
-        # createfuzzy
-        elif args[0] == "createfuzzy":
-            if len(args) < 2:
-                print(g_cmdHelpMap.get(args[0]))
-            else:
-                if args[1] not in g_indices:
-                    print("Index %s does not exist." % args[1])
-                else:
-                    tableFuzzy = createFuzzy(g_indices.get(args[1]))
-                    g_fuzzyDict.update({args[1] : tableFuzzy})
-                    try:
-                        print("Saving fuzzy dictionary %s." % args[1])
-                        writeFuzzy(args[1], tableFuzzy)
-                    except:
-                        print("Failed to write fuzzy dictionary to file.")
-        # fuzzyfind
-        elif args[0] == "fuzzyfind":
-            if len(args) < 3:
-                print(g_cmdHelpMap.get(args[0]))
-            else:
-                if args[1] not in g_tables:
-                    print("Table %s does not exist." % args[1])
-                elif args[1] not in g_indices:
-                    print("Index %s does not exist." % args[1])
+                    print("Fuzzy1 %s does not exist." % args[1])
                 elif args[1] not in g_fuzzyDict2:
-                    print("Fuzzy Dictionary %s does not exist." % args[1])
+                    print("Fuzzy2 %s does not exist." % args[1])
                 else:
-                    table = g_tables.get(args[1])
-                    index = g_indices.get(args[1])
-                    fuzzy = g_fuzzyDict2.get(args[1])
-                    results = fuzzyFind(table, index, fuzzy, args[2:-1], int(args[-1]))
+                    results = find(set(args[2:]), g_tables.get(args[1]), g_indices.get(args[1]), g_fuzzyDict.get(args[1]), g_fuzzyDict2.get(args[1]), True)
                     for row in results:
                         print(row)
                     print("Found %d rows." % len(results))
-        # buildfuzzy
-        elif args[0] == "buildfuzzy":
-            if len(args) < 2:
-                print(g_cmdHelpMap.get(args[0]))
-            else:
-                if args[1] not in g_indices:
-                    print("Index %s does not exist." % args[1])
-                else:
-                    tableFuzzy = buildFuzzy(g_indices.get(args[1]))
-                    g_fuzzyDict2.update({args[1] : tableFuzzy})
-                    try:
-                        print("Saving fuzzy dictionary %s." % args[1])
-                        writeFuzzy2(args[1], tableFuzzy)
-                    except:
-                        print("Failed to write fuzzy dictionary to file.")
         # Bad commands
         else:
             printHelp()
