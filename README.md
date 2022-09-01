@@ -1,6 +1,6 @@
-# PyAeonDB
+# PyAeonDb
 
-This is a proof-of-concept implementation of a full-text inverted index for Hexarc's AeonDB, a NoSQL database.
+This is a proof-of-concept implementation of a full-text inverted index for AeonDB, the NoSQL database of Hexarc, an integrated web service stack.
 
 # Commands
 
